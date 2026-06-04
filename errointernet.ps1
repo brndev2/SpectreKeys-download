@@ -140,4 +140,10 @@ Log "OK" "Operation completed successfully!"
 Log "WARN" "Steam startup may take longer than usual."
 Write-Host ""
 
+$exe = Join-Path $steam "steam.exe"
+if (Test-Path $exe) {
+    Log "INFO" "Starting Steam..."
+    Start-Process $exe -ArgumentList "-clearbeta"
+}
+
 exit
