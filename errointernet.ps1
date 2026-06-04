@@ -140,13 +140,4 @@ Log "OK" "Operation completed successfully!"
 Log "WARN" "Steam startup may take longer than usual."
 Write-Host ""
 
-$exe = Join-Path $steam "steam.exe"
-if (Test-Path $exe) {
-    Log "INFO" "Starting Steam..."
-    Start-Process $exe -ArgumentList "-clearbeta"
-}
-
-Write-Host ""
-Log "INFO" "Press any key to close this window..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 exit
