@@ -71,7 +71,7 @@ $Text = @{
         DetectingSteam = "Detectando a pasta da Steam..."
         SteamNotFound = "A pasta da Steam nao foi encontrada. Execute novamente com -SteamPath ""C:\Caminho\Da\Steam""."
         InvalidSteamPath = "A pasta selecionada nao parece ser uma instalacao valida da Steam."
-        Current = "Integracao atual: {0}"
+        Current = "Integracao detectada."
         Choose = "Escolha a integracao para ativar:"
         OptionSteamTools = "1 - SteamTools"
         OptionOpenSteamTool = "2 - OpenSteamTool"
@@ -85,14 +85,14 @@ $Text = @{
         Confirm = "Isso vai fechar a Steam e trocar para {0}. Continuar? (S/N)"
         Cancelled = "Cancelado."
         ClosingSteam = "Fechando a Steam..."
-        Downloading = "Baixando {0}..."
-        Installing = "Instalando {0}..."
-        MovingScripts = "Corrigindo arquivos..."
+        Downloading = "Atualizando..."
+        Installing = "Instalando..."
+        MovingScripts = "Corrigindo erros..."
         UpdatingSettings = "Atualizando configuracoes..."
-        SettingsSkipped = "Atualizacao das configuracoes do DolinTools ignorada."
+        SettingsSkipped = "Atualizacao das configuracoes ignorada."
         StartingSteam = "Iniciando a Steam..."
-        Done = "{0} esta ativo."
-        VerificationFailed = "A instalacao terminou, mas {0} nao foi detectado na pasta da Steam."
+        Done = "Módulos instalados com sucesso!."
+        VerificationFailed = "A instalacao terminou, mas nao foi detectado na Steam."
         PressEnter = "Pressione Enter para sair"
     }
     "es" = @{
@@ -566,13 +566,13 @@ try {
 
     $current = Get-InstalledIntegration $steamRoot
     Write-Host ("Steam: {0}" -f $steamRoot)
-    Write-Host ($Text.Current -f $current)
+    Write-Host $Text.Current
 
     $target = "SkyTools"
 
     Write-Host ""
-    Write-Host ($Text.SelectedTool -f $target) -ForegroundColor Yellow
-    Write-ToolDescription $target
+    # Write-Host ($Text.SelectedTool -f $target) -ForegroundColor Yellow
+    # Write-ToolDescription $target
 
     $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("DolinTools.Switch." + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
