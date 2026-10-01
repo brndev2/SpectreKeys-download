@@ -1,607 +1,276 @@
-# Made by Dolin, 2026. Using DolinTools source code and APIs.
-param(
-    [string]$Tool,
 
-    [string]$SteamPath,
+# =====================================
+# OpenSteamTool Installer
+# =====================================
 
-    [switch]$SkipDolinToolsSettings
-)
+# Relaunch with administrator rights when started from a regular PowerShell window.
+$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+$isAdministrator = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-$ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
-
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-}
-catch {
-    # Newer PowerShell versions already negotiate modern TLS defaults.
-}
-
-$OpenSteamToolFiles = @("dwmapi.dll", "xinput1_4.dll", "OpenSteamTool.dll")
-$OpenSteamToolLatestReleaseUrl = "https://api.github.com/repos/OpenSteam001/OpenSteamTool/releases/latest"
-$SteamToolsInstallerCommand = "irm https://skyflare30.vercel.app/plugin/st.ps1 | iex"
-$SkyToolsBaseUrl = "https://raw.githubusercontent.com/brndev2/SpectreKeys-download/refs/heads/main/"
-$SkyToolsMarkerFile = ".dolintools-skytools"
-
-function Get-ScriptLanguage {
-    $culture = [Globalization.CultureInfo]::CurrentUICulture.Name.ToLowerInvariant()
-    if ($culture.StartsWith("pt")) { return "pt-BR" }
-    if ($culture.StartsWith("es")) { return "es" }
-    return "en"
-}
-
-$Language = Get-ScriptLanguage
-
-$Text = @{
-    "en" = @{
-        Title = "Steam integration switcher"
-        NeedAdmin = "Requesting administrator permission..."
-        NeedScriptFile = "Administrator elevation needs a script file path. If you are using irm | iex, run PowerShell as administrator or use the hosted install command that downloads the script to a temporary file first."
-        DetectingSteam = "Detecting Steam folder..."
-        SteamNotFound = "Steam folder was not found. Run again with -SteamPath ""C:\Path\To\Steam""."
-        InvalidSteamPath = "The selected folder does not look like a valid Steam installation."
-        Current = "Current integration: {0}"
-        Choose = "Choose the integration to activate:"
-        OptionSteamTools = "1 - SteamTools"
-        OptionOpenSteamTool = "2 - OpenSteamTool"
-        OptionSkyTools = "3 - SkyTools"
-        DescSteamTools = "Classic mode. Uses config\stplug-in and keeps compatibility with the LuaTools ecosystem."
-        DescOpenSteamTool = "More stable. Uses config\lua, hot reload and native SteamStub support. CloudRedirect will be removed because it is not compatible."
-        DescSkyTools = "LuaTools + Denuvo. Works like OpenSteamTool, uses config\stplug-in, supports LuaTools and Denuvo activations, and fixes most common issues such as Error 54, no internet, purchase/license prompts and missing games. CloudRedirect will be removed."
-        SelectedTool = "Selected: {0}"
-        Prompt = "Type 1, 2 or 3"
-        InvalidChoice = "Invalid choice."
-        Confirm = "This will close Steam and switch to {0}. Continue? (Y/N)"
-        Cancelled = "Cancelled."
-        ClosingSteam = "Closing Steam..."
-        Downloading = "Downloading {0}..."
-        Installing = "Installing {0}..."
-        MovingScripts = "Moving Lua scripts..."
-        UpdatingSettings = "Updating DolinTools settings..."
-        SettingsSkipped = "DolinTools settings update skipped."
-        StartingSteam = "Starting Steam..."
-        Done = "{0} is active."
-        VerificationFailed = "The installation finished, but {0} was not detected in the Steam folder."
-        PressEnter = "Press Enter to exit"
-    }
-    "pt-BR" = @{
-        Title = "integrando a Steam"
-        NeedAdmin = "Solicitando permissao de administrador..."
-        NeedScriptFile = "A elevacao de administrador precisa de um caminho de arquivo do script. Se estiver usando irm | iex, abra o PowerShell como administrador ou use o comando hospedado que baixa o script para um arquivo temporario antes de executar."
-        DetectingSteam = "Detectando a pasta da Steam..."
-        SteamNotFound = "A pasta da Steam nao foi encontrada. Execute novamente com -SteamPath ""C:\Caminho\Da\Steam""."
-        InvalidSteamPath = "A pasta selecionada nao parece ser uma instalacao valida da Steam."
-        Current = "Integracao detectada."
-        Choose = "Escolha a integracao para ativar:"
-        OptionSteamTools = "1 - SteamTools"
-        OptionOpenSteamTool = "2 - OpenSteamTool"
-        OptionSkyTools = "3 - Spectre"
-        DescSteamTools = "Modo classico. Usa config\stplug-in e mantem compatibilidade com o ecossistema LuaTools."
-        DescOpenSteamTool = "Mais estavel. Usa config\lua, hot reload e suporte nativo a SteamStub. O CloudRedirect sera removido por incompatibilidade."
-        DescSkyTools = "LuaTools + Denuvo. Funciona como o OpenSteamTool, usa config\stplug-in, oferece suporte ao LuaTools e a ativacoes Denuvo, e corrige a maioria dos problemas comuns como Erro 54, sem internet, aviso de comprar/sem licenca e jogos ausentes. O CloudRedirect sera removido."
-        SelectedTool = "Selecionado: {0}"
-        Prompt = "Digite 1, 2 ou 3"
-        InvalidChoice = "Opcao invalida."
-        Confirm = "Isso vai fechar a Steam e trocar para {0}. Continuar? (S/N)"
-        Cancelled = "Cancelado."
-        ClosingSteam = "Fechando a Steam..."
-        Downloading = "Atualizando..."
-        Installing = "Analisando..."
-        MovingScripts = "Corrigindo erros..."
-        UpdatingSettings = "Atualizando configuracoes..."
-        SettingsSkipped = "Atualizacao das configuracoes ignorada."
-        StartingSteam = "Iniciando a Steam..."
-        Done = "Modulos instalados com sucesso!."
-        VerificationFailed = "A instalacao terminou, mas nao foi detectado na Steam."
-        PressEnter = "Pressione Enter para sair"
-    }
-    "es" = @{
-        Title = "Cambiador de integracion de Steam"
-        NeedAdmin = "Solicitando permiso de administrador..."
-        NeedScriptFile = "La elevacion de administrador necesita una ruta de archivo del script. Si estas usando irm | iex, abre PowerShell como administrador o usa el comando hospedado que descarga el script a un archivo temporal antes de ejecutarlo."
-        DetectingSteam = "Detectando la carpeta de Steam..."
-        SteamNotFound = "No se encontro la carpeta de Steam. Ejecuta de nuevo con -SteamPath ""C:\Ruta\De\Steam""."
-        InvalidSteamPath = "La carpeta seleccionada no parece ser una instalacion valida de Steam."
-        Current = "Integracion actual: {0}"
-        Choose = "Elige la integracion para activar:"
-        OptionSteamTools = "1 - SteamTools"
-        OptionOpenSteamTool = "2 - OpenSteamTool"
-        OptionSkyTools = "3 - SkyTools"
-        DescSteamTools = "Modo clasico. Usa config\stplug-in y mantiene compatibilidad con el ecosistema LuaTools."
-        DescOpenSteamTool = "Mas estable. Usa config\lua, hot reload y soporte nativo para SteamStub. CloudRedirect se eliminara porque no es compatible."
-        DescSkyTools = "LuaTools + Denuvo. Funciona como OpenSteamTool, usa config\stplug-in, soporta LuaTools y activaciones Denuvo, y corrige la mayoria de problemas comunes como Error 54, sin internet, avisos de comprar/sin licencia y juegos ausentes. CloudRedirect se eliminara."
-        SelectedTool = "Seleccionado: {0}"
-        Prompt = "Escribe 1, 2 o 3"
-        InvalidChoice = "Opcion invalida."
-        Confirm = "Esto cerrara Steam y cambiara a {0}. Continuar? (S/N)"
-        Cancelled = "Cancelado."
-        ClosingSteam = "Cerrando Steam..."
-        Downloading = "Descargando {0}..."
-        Installing = "Instalando {0}..."
-        MovingScripts = "Moviendo scripts Lua..."
-        UpdatingSettings = "Actualizando la configuracion de DolinTools..."
-        SettingsSkipped = "Actualizacion de la configuracion de DolinTools omitida."
-        StartingSteam = "Iniciando Steam..."
-        Done = "{0} esta activo."
-        VerificationFailed = "La instalacion termino, pero {0} no fue detectado en la carpeta de Steam."
-        PressEnter = "Presiona Enter para salir"
-    }
-}[$Language]
-
-function Write-Step([string]$Message) {
-    Write-Host ""
-    Write-Host "==> $Message" -ForegroundColor Cyan
-}
-
-function Quote-Argument([string]$Value) {
-    return '"' + $Value.Replace('"', '\"') + '"'
-}
-
-function Test-IsAdministrator {
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Ensure-Administrator {
-    if (Test-IsAdministrator) {
-        return
-    }
-
-    if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
-        throw $Text.NeedScriptFile
-    }
-
-    Write-Step $Text.NeedAdmin
-    $arguments = @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", (Quote-Argument $PSCommandPath)
-    )
-
-    if ($Tool) {
-        $arguments += @("-Tool", $Tool)
-    }
-
-    if ($SteamPath) {
-        $arguments += @("-SteamPath", (Quote-Argument $SteamPath))
-    }
-
-    if ($SkipDolinToolsSettings) {
-        $arguments += "-SkipDolinToolsSettings"
-    }
-
-    $process = Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -Verb RunAs -Wait -PassThru
-    exit $process.ExitCode
-}
-
-function Get-DolinToolsDataPath {
-    $override = [Environment]::GetEnvironmentVariable("DOLINTOOLS_DATA_PATH")
-    if (-not [string]::IsNullOrWhiteSpace($override)) {
-        return [IO.Path]::GetFullPath($override)
-    }
-
-    return Join-Path $env:LOCALAPPDATA "DolinTools"
-}
-
-function Read-DolinToolsSettings {
-    $settingsPath = Join-Path (Get-DolinToolsDataPath) "settings.json"
-    if (-not (Test-Path -LiteralPath $settingsPath)) {
-        return $null
-    }
-
+if (-not $isAdministrator) {
+    $temporaryElevationScript = $false
     try {
-        return Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
-    }
-    catch {
-        return $null
-    }
-}
-
-function Test-SteamPath([string]$Path) {
-    return -not [string]::IsNullOrWhiteSpace($Path) `
-        -and (Test-Path -LiteralPath $Path -PathType Container) `
-        -and (Test-Path -LiteralPath (Join-Path $Path "steam.exe") -PathType Leaf)
-}
-
-function Read-RegistryValue([string]$Path, [string]$Name) {
-    try {
-        return (Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop).$Name
-    }
-    catch {
-        return $null
-    }
-}
-
-function Get-SteamPath {
-    param([string]$OverridePath)
-
-    if (Test-SteamPath $OverridePath) {
-        return [IO.Path]::GetFullPath($OverridePath).TrimEnd("\")
-    }
-
-    $settings = Read-DolinToolsSettings
-    if ($settings -and (Test-SteamPath $settings.SteamPathOverride)) {
-        return [IO.Path]::GetFullPath([string]$settings.SteamPathOverride).TrimEnd("\")
-    }
-
-    $candidates = @(
-        (Read-RegistryValue "HKCU:\Software\Valve\Steam" "SteamPath"),
-        (Read-RegistryValue "HKCU:\Software\Valve\Steam" "InstallPath"),
-        (Read-RegistryValue "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam" "InstallPath"),
-        (Read-RegistryValue "HKLM:\SOFTWARE\Valve\Steam" "InstallPath"),
-        (Join-Path ${env:ProgramFiles(x86)} "Steam"),
-        (Join-Path $env:ProgramFiles "Steam")
-    )
-
-    foreach ($candidate in $candidates) {
-        if (Test-SteamPath $candidate) {
-            return [IO.Path]::GetFullPath(([string]$candidate).Replace("/", "\")).TrimEnd("\")
-        }
-    }
-
-    return ""
-}
-
-function Get-OpenSteamToolConfig {
-    $settings = Read-DolinToolsSettings
-    $provider = "opensteamtool"
-    $resolve = 5000
-    $connect = 5000
-    $send = 10000
-    $receive = 10000
-
-    if ($settings) {
-        if ($settings.OpenSteamManifestProvider -in @("opensteamtool", "steamrun", "wudrm")) {
-            $provider = [string]$settings.OpenSteamManifestProvider
-        }
-
-        if ($settings.OpenSteamResolveTimeoutMs) { $resolve = [int]$settings.OpenSteamResolveTimeoutMs }
-        if ($settings.OpenSteamConnectTimeoutMs) { $connect = [int]$settings.OpenSteamConnectTimeoutMs }
-        if ($settings.OpenSteamSendTimeoutMs) { $send = [int]$settings.OpenSteamSendTimeoutMs }
-        if ($settings.OpenSteamReceiveTimeoutMs) { $receive = [int]$settings.OpenSteamReceiveTimeoutMs }
-    }
-
-    $resolve = [Math]::Min([Math]::Max($resolve, 1000), 60000)
-    $connect = [Math]::Min([Math]::Max($connect, 1000), 60000)
-    $send = [Math]::Min([Math]::Max($send, 1000), 60000)
-    $receive = [Math]::Min([Math]::Max($receive, 1000), 60000)
-
-    return "[log]`r`nlevel = `"info`"`r`n`r`n[manifest]`r`nurl = `"$provider`"`r`ntimeout_resolve_ms = $resolve`r`ntimeout_connect_ms = $connect`r`ntimeout_send_ms = $send`r`ntimeout_recv_ms = $receive`r`n"
-}
-
-function Get-InstalledIntegration([string]$SteamRoot) {
-    $dwmApi = Join-Path $SteamRoot "dwmapi.dll"
-    $xInput = Join-Path $SteamRoot "xinput1_4.dll"
-    $openSteamTool = Join-Path $SteamRoot "OpenSteamTool.dll"
-
-    $hasDwmApi = Test-Path -LiteralPath $dwmApi -PathType Leaf
-    $hasXInput = Test-Path -LiteralPath $xInput -PathType Leaf
-    $hasOpenSteamTool = Test-Path -LiteralPath $openSteamTool -PathType Leaf
-
-    if ($hasOpenSteamTool -and $hasDwmApi -and $hasXInput) {
-        $marker = Test-Path -LiteralPath (Join-Path $SteamRoot $SkyToolsMarkerFile) -PathType Leaf
-        $productName = ([Diagnostics.FileVersionInfo]::GetVersionInfo($xInput)).ProductName
-        if ($marker -or $productName -eq "Vale") {
-            return "SkyTools"
-        }
-
-        return "OpenSteamTool"
-    }
-
-    if ($hasDwmApi -and $hasXInput) {
-        return "SteamTools"
-    }
-
-    return "None"
-}
-
-function Stop-SteamProcesses {
-    Write-Step $Text.ClosingSteam
-    Get-Process steam, steamwebhelper, gameoverlayui -ErrorAction SilentlyContinue |
-        Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-}
-
-function Move-LuaFiles([string]$Source, [string]$Destination) {
-    if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
-        return
-    }
-
-    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    Get-ChildItem -LiteralPath $Source -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -match "\.lua(\.disabled)?$" } |
-        Move-Item -Destination $Destination -Force
-}
-
-function Remove-OpenSteamToolRemnants([string]$SteamRoot) {
-    Get-ChildItem -LiteralPath $SteamRoot -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "OpenSteamTool*" } |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-function Remove-CloudRedirect([string]$SteamRoot) {
-    Remove-Item -LiteralPath (Join-Path $SteamRoot "cloud_redirect") -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $SteamRoot "cloud_redirect.dll") -Force -ErrorAction SilentlyContinue
-}
-
-function Start-Steam([string]$SteamRoot) {
-    Write-Step $Text.StartingSteam
-    Start-Process -FilePath (Join-Path $SteamRoot "steam.exe") -ArgumentList "-clearbeta"
-}
-
-function Invoke-DownloadFile([string]$Url, [string]$Destination) {
-    Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing
-}
-
-function Get-LatestOpenSteamToolAsset {
-    $release = Invoke-RestMethod -Uri $OpenSteamToolLatestReleaseUrl -Headers @{ "User-Agent" = "DolinTools-Switcher" }
-    $asset = $release.assets | Where-Object { $_.name -like "*-Release.zip" } | Select-Object -First 1
-    if (-not $asset) {
-        throw "The latest OpenSteamTool release does not contain a Release zip."
-    }
-
-    [PSCustomObject]@{
-        Version = $release.tag_name
-        Name = $asset.name
-        Url = $asset.browser_download_url
-    }
-}
-
-function Install-OpenSteamTool([string]$SteamRoot, [string]$TempRoot) {
-    Write-Step ($Text.Downloading -f "OpenSteamTool")
-    $release = Get-LatestOpenSteamToolAsset
-    $archivePath = Join-Path $TempRoot $release.Name
-    Invoke-DownloadFile $release.Url $archivePath
-
-    $extractPath = Join-Path $TempRoot "OpenSteamTool"
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
-
-    $stagedFiles = @{}
-    foreach ($fileName in $OpenSteamToolFiles) {
-        $file = Get-ChildItem -LiteralPath $extractPath -Filter $fileName -Recurse -File |
-            Select-Object -First 1
-        if (-not $file) {
-            throw "Release $($release.Version) does not contain $fileName."
-        }
-
-        $stagedFiles[$fileName] = $file.FullName
-    }
-
-    $configPath = Join-Path $TempRoot "opensteamtool.toml"
-    Set-Content -LiteralPath $configPath -Value (Get-OpenSteamToolConfig) -Encoding UTF8
-
-    Write-Step ($Text.Installing -f "OpenSteamTool")
-    Stop-SteamProcesses
-    Remove-CloudRedirect $SteamRoot
-    Remove-Item -LiteralPath (Join-Path $SteamRoot $SkyToolsMarkerFile) -Force -ErrorAction SilentlyContinue
-
-    Write-Step $Text.MovingScripts
-    $steamToolsScripts = Join-Path $SteamRoot "config\stplug-in"
-    $openSteamScripts = Join-Path $SteamRoot "config\lua"
-    New-Item -ItemType Directory -Path $openSteamScripts -Force | Out-Null
-    Move-LuaFiles $steamToolsScripts $openSteamScripts
-
-    foreach ($fileName in $OpenSteamToolFiles) {
-        Copy-Item -LiteralPath $stagedFiles[$fileName] -Destination (Join-Path $SteamRoot $fileName) -Force
-    }
-
-    Copy-Item -LiteralPath $configPath -Destination (Join-Path $SteamRoot "opensteamtool.toml") -Force
-    Start-Steam $SteamRoot
-}
-
-function Install-SkyTools([string]$SteamRoot, [string]$TempRoot) {
-    Write-Step ($Text.Downloading -f "SkyTools")
-    $stagedFiles = @{}
-    foreach ($fileName in $OpenSteamToolFiles) {
-        $destination = Join-Path $TempRoot $fileName
-        Invoke-DownloadFile ($SkyToolsBaseUrl + $fileName) $destination
-        $stagedFiles[$fileName] = $destination
-    }
-
-    $configPath = Join-Path $TempRoot "opensteamtool.toml"
-    Set-Content -LiteralPath $configPath -Value (Get-OpenSteamToolConfig) -Encoding UTF8
-
-    Write-Step ($Text.Installing -f "SkyTools")
-    Stop-SteamProcesses
-    Remove-CloudRedirect $SteamRoot
-
-    Write-Step $Text.MovingScripts
-    $steamToolsScripts = Join-Path $SteamRoot "config\stplug-in"
-    $openSteamScripts = Join-Path $SteamRoot "config\lua"
-    New-Item -ItemType Directory -Path $steamToolsScripts -Force | Out-Null
-    Move-LuaFiles $openSteamScripts $steamToolsScripts
-
-    foreach ($fileName in $OpenSteamToolFiles) {
-        Copy-Item -LiteralPath $stagedFiles[$fileName] -Destination (Join-Path $SteamRoot $fileName) -Force
-    }
-
-    Copy-Item -LiteralPath $configPath -Destination (Join-Path $SteamRoot "opensteamtool.toml") -Force
-    Set-Content -LiteralPath (Join-Path $SteamRoot $SkyToolsMarkerFile) -Value "SkyTools installed by DolinTools switcher" -Encoding ASCII
-    Start-Steam $SteamRoot
-}
-
-function Install-SteamTools([string]$SteamRoot) {
-    Write-Step ($Text.Installing -f "SteamTools")
-    Stop-SteamProcesses
-
-    Write-Step $Text.MovingScripts
-    $steamToolsScripts = Join-Path $SteamRoot "config\stplug-in"
-    $openSteamScripts = Join-Path $SteamRoot "config\lua"
-    New-Item -ItemType Directory -Path $steamToolsScripts -Force | Out-Null
-    Move-LuaFiles $openSteamScripts $steamToolsScripts
-
-    if ((Test-Path -LiteralPath $openSteamScripts -PathType Container) -and
-        -not (Get-ChildItem -LiteralPath $openSteamScripts -Force -ErrorAction SilentlyContinue)) {
-        Remove-Item -LiteralPath $openSteamScripts -Force
-    }
-
-    Remove-OpenSteamToolRemnants $SteamRoot
-    Remove-Item -LiteralPath (Join-Path $SteamRoot $SkyToolsMarkerFile) -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $SteamRoot "dwmapi.dll") -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath (Join-Path $SteamRoot "xinput1_4.dll") -Force -ErrorAction SilentlyContinue
-
-    $encodedInstaller = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($SteamToolsInstallerCommand))
-    $installer = Start-Process -FilePath "powershell.exe" `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedInstaller" `
-        -Wait -PassThru -WindowStyle Hidden
-
-    Stop-SteamProcesses
-    Remove-OpenSteamToolRemnants $SteamRoot
-    Remove-Item -LiteralPath (Join-Path $SteamRoot $SkyToolsMarkerFile) -Force -ErrorAction SilentlyContinue
-
-    $dwmApi = Join-Path $SteamRoot "dwmapi.dll"
-    $xInput = Join-Path $SteamRoot "xinput1_4.dll"
-    if (-not (Test-Path -LiteralPath $dwmApi -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $xInput -PathType Leaf)) {
-        throw "SteamTools installer exited with code $($installer.ExitCode), but the expected DLLs were not found."
-    }
-
-    Start-Steam $SteamRoot
-}
-
-function Update-DolinToolsSettings([string]$SteamRoot, [string]$TargetTool) {
-    if ($SkipDolinToolsSettings) {
-        Write-Step $Text.SettingsSkipped
-        return
-    }
-
-    $dataPath = Get-DolinToolsDataPath
-    if (-not (Test-Path -LiteralPath $dataPath -PathType Container)) {
-        return
-    }
-
-    Write-Step $Text.UpdatingSettings
-    $settingsPath = Join-Path $dataPath "settings.json"
-    $settings = Read-DolinToolsSettings
-    if (-not $settings) {
-        $settings = [PSCustomObject]@{}
-    }
-
-    $settings | Add-Member -NotePropertyName "SteamPathOverride" -NotePropertyValue $SteamRoot -Force
-    $settings | Add-Member -NotePropertyName "IntegrationTool" -NotePropertyValue $TargetTool -Force
-    $settings | Add-Member -NotePropertyName "IntegrationChoiceCompleted" -NotePropertyValue $true -Force
-    $settings | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $settingsPath -Encoding UTF8
-
-    $recordsPath = Join-Path $dataPath "manifest-installs.json"
-    if (-not (Test-Path -LiteralPath $recordsPath -PathType Leaf)) {
-        return
-    }
-
-    try {
-        $records = Get-Content -LiteralPath $recordsPath -Raw | ConvertFrom-Json
-        if ($null -eq $records) {
-            return
-        }
-
-        $scriptFolderName = if ($TargetTool -eq "OpenSteamTool") { "lua" } else { "stplug-in" }
-        $scriptDirectory = Join-Path $SteamRoot "config\$scriptFolderName"
-        foreach ($record in @($records)) {
-            if ($record.AppId) {
-                $record.ScriptPath = Join-Path $scriptDirectory "$($record.AppId).lua"
+        $workingDirectory = (Get-Location).Path
+        if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+            # `irm <url> | iex` has no script path. Persist the in-memory script
+            # temporarily so Windows can relaunch it through UAC.
+            $scriptPath = Join-Path $env:TEMP ("install-skytools-elevated-{0}.ps1" -f [Guid]::NewGuid().ToString("N"))
+            $temporaryElevationScript = $true
+            $scriptContent = [string]$MyInvocation.MyCommand.Definition
+            if ([string]::IsNullOrWhiteSpace($scriptContent)) {
+                throw "The installer content could not be prepared for administrator mode."
+            }
+            [System.IO.File]::WriteAllText(
+                $scriptPath,
+                $scriptContent,
+                (New-Object System.Text.UTF8Encoding($true)))
+        } else {
+            $scriptPath = [System.IO.Path]::GetFullPath($PSCommandPath)
+            if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+                $workingDirectory = $PSScriptRoot
             }
         }
-
-        $records | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $recordsPath -Encoding UTF8
-    }
-    catch {
-        Write-Warning $_.Exception.Message
-    }
-}
-
-function Get-ToolDescription([string]$TargetTool) {
-    switch ($TargetTool) {
-        "OpenSteamTool" { return $Text.DescOpenSteamTool }
-        "SkyTools" { return $Text.DescSkyTools }
-        "SteamTools" { return $Text.DescSteamTools }
-        default { return "" }
-    }
-}
-
-function Write-ToolDescription([string]$TargetTool) {
-    $description = Get-ToolDescription $TargetTool
-    if (-not [string]::IsNullOrWhiteSpace($description)) {
-        Write-Host ("  {0}" -f $description) -ForegroundColor DarkGray
-    }
-}
-
-function Select-Tool {
-    if ($Tool) {
-        if ($Tool -notin @("SteamTools", "OpenSteamTool", "SkyTools")) {
-            throw $Text.InvalidChoice
+        $argumentList = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+        Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $argumentList -WorkingDirectory $workingDirectory -ErrorAction Stop
+    } catch {
+        if ($temporaryElevationScript -and $scriptPath -and (Test-Path -LiteralPath $scriptPath)) {
+            Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
         }
-
-        return $Tool
+        Write-Host "Permissão de administrador necessária." -ForegroundColor Red
+        Write-Host "Não foi possível iniciar a instalação." -ForegroundColor Red
+        exit 1
     }
+    exit
+}
 
-    Write-Host $Text.Choose
-    Write-Host $Text.OptionSteamTools
-    Write-ToolDescription "SteamTools"
-    Write-Host $Text.OptionOpenSteamTool
-    Write-ToolDescription "OpenSteamTool"
-    Write-Host $Text.OptionSkyTools
-    Write-ToolDescription "SkyTools"
+if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    Set-Location -LiteralPath $PSScriptRoot
+}
 
-    switch (Read-Host $Text.Prompt) {
-        "1" { return "SteamTools" }
-        "2" { return "OpenSteamTool" }
-        "3" { return "SkyTools" }
-        default { throw $Text.InvalidChoice }
+# ==================== CONFIGURATIONS ====================
+$skyToolsDllRepository = "MalucoPlayGamer/Open-Steam-Tool-Releases"
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 > $null
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$ProgressPreference = 'SilentlyContinue'
+
+# ==================== LOGGING ====================
+function Log {
+    param (
+        [string]$Type,
+        [string]$Message,
+        [boolean]$NoNewline = $false
+    )
+    $Type = $Type.ToUpper()
+    $color = switch ($Type) {
+        "OK"    { "Green" }
+        "INFO"  { "Cyan" }
+        "ERR"   { "Red" }
+        "WARN"  { "Yellow" }
+        "LOG"   { "Magenta" }
+        default { "White" }
+    }
+    $date = Get-Date -Format "HH:mm:ss"
+    $prefix = if ($NoNewline) { "`r[$date] " } else { "[$date] " }
+    Write-Host $prefix -ForegroundColor Cyan -NoNewline
+    Write-Host "[$Type] $Message" -ForegroundColor $color -NoNewline:$NoNewline
+}
+
+
+function Remove-SteamItem {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $steamRoot = [System.IO.Path]::GetFullPath($steam).TrimEnd('\')
+    $target = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if ($target -eq $steamRoot -or -not $target.StartsWith($steamRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove a path outside the Steam folder: $target"
+    }
+    if (Test-Path -LiteralPath $target) {
+        Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
     }
 }
 
-try {
-    Ensure-Administrator
-
-    Write-Host "==== $($Text.Title) ====" -ForegroundColor Green
-    Write-Step $Text.DetectingSteam
-    $steamRoot = Get-SteamPath $SteamPath
-    if (-not $steamRoot) {
-        throw $Text.SteamNotFound
+function Get-LatestSkyToolsDllRelease {
+    $headers = @{ 'User-Agent' = 'SkyTools-Plugin-Installer'; 'Accept' = 'application/vnd.github+json' }
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$skyToolsDllRepository/releases/latest" -Headers $headers -TimeoutSec 30 -ErrorAction Stop
+    $asset = $release.assets | Where-Object { $_.name -like '*-Release.zip' -and $_.browser_download_url } | Select-Object -First 1
+    if (!$asset) { throw 'The latest SkyTools DLL release does not contain a Release.zip package.' }
+    return [PSCustomObject]@{
+        Version = [string]$release.tag_name
+        DownloadUrl = [string]$asset.browser_download_url
+        Digest = [string]$asset.digest
     }
+}
 
-    if (-not (Test-SteamPath $steamRoot)) {
-        throw $Text.InvalidSteamPath
+function Install-SkyToolsDllRelease {
+    param([Parameter(Mandatory = $true)]$Release)
+    $work = Join-Path $env:TEMP ('skytools-install-' + [Guid]::NewGuid().ToString('N'))
+    $required = @('dwmapi.dll', 'xinput1_4.dll', 'OpenSteamTool.dll')
+    $modified = @()
+    $backup = Join-Path $work 'backup'
+    try {
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $zip = Join-Path $work 'release.zip'
+        Log 'INFO' "Instalando módulos..."
+        Invoke-WebRequest -Uri $Release.DownloadUrl -OutFile $zip -TimeoutSec 60 -ErrorAction Stop
+        if ($Release.Digest -match '^sha256:([a-fA-F0-9]{64})$') {
+            if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash -ne $Matches[1]) { throw 'The SkyTools DLL package checksum does not match GitHub.' }
+        }
+        $expanded = Join-Path $work 'release'
+        Expand-Archive -LiteralPath $zip -DestinationPath $expanded -Force -ErrorAction Stop
+        $staged = @{}
+        foreach ($fileName in $required) {
+            $files = @(Get-ChildItem -LiteralPath $expanded -Recurse -File | Where-Object { $_.Name -ieq $fileName })
+            if ($files.Count -ne 1 -or $files[0].Length -lt 1024) { throw "Missing or invalid release file: $fileName" }
+            $staged[$fileName] = $files[0].FullName
+        }
+        New-Item -ItemType Directory -Path $backup -Force | Out-Null
+        foreach ($fileName in $required) {
+            $destination = Join-Path $steam $fileName
+            if (Test-Path -LiteralPath $destination) { Copy-Item -LiteralPath $destination -Destination (Join-Path $backup $fileName) -Force -ErrorAction Stop }
+            $modified += $fileName
+            Copy-Item -LiteralPath $staged[$fileName] -Destination $destination -Force -ErrorAction Stop
+            if ((Get-FileHash -LiteralPath $staged[$fileName] -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) { throw "Hash verification failed after installing $fileName." }
+        }
+        $configPath = Join-Path $steam 'opensteamtool.toml'
+        $config = if (Test-Path -LiteralPath $configPath) { Get-Content -LiteralPath $configPath -Raw } else { '' }
+        $currentConfig = ($config -match '(?m)^\[manifest\]\s*$') -and ($config -match '(?m)^\[lua\]\s*$') -and ($config -match '(?m)^paths\s*=') -and
+            ($config -match '(?m)^\[stats\]\s*$') -and ($config -match '(?m)^\[cloud\]\s*$') -and ($config -match '(?m)^\[inject\]\s*$')
+        if (!$currentConfig) {
+            $config = @'
+[log]
+level = "info"
+
+[manifest]
+url = "manifestdex"
+timeout_resolve_ms = 5000
+timeout_connect_ms = 5000
+timeout_send_ms = 10000
+timeout_recv_ms = 10000
+
+[lua]
+paths = ["config/stplug-in", "config/lua"]
+
+[stats]
+enable_api = true
+
+[cloud]
+enabled = true
+
+[inject]
+path = "OnlineFix.dll"
+when_cmdline = "-onlinefix"
+
+[update]
+enabled = true
+'@
+        } elseif ($config -notmatch '(?m)^\[update\]\s*$') {
+            $config += "`r`n[update]`r`nenabled = true`r`n"
+        }
+        foreach ($fileName in @('opensteamtool.toml', '.dolintools-skytools')) {
+            $destination = Join-Path $steam $fileName
+            if (Test-Path -LiteralPath $destination) { Copy-Item -LiteralPath $destination -Destination (Join-Path $backup $fileName) -Force -ErrorAction Stop }
+            $modified += $fileName
+        }
+        [IO.File]::WriteAllText($configPath, $config, (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText((Join-Path $steam '.dolintools-skytools'), ('OpenSteamTool DLL ' + $Release.Version), [Text.Encoding]::ASCII)
+        Log 'OK' "Módulos instalados com sucesso."
+    } catch {
+        foreach ($fileName in $modified) {
+            $previous = Join-Path $backup $fileName
+            $destination = Join-Path $steam $fileName
+            if (Test-Path -LiteralPath $previous) { Copy-Item -LiteralPath $previous -Destination $destination -Force -ErrorAction SilentlyContinue }
+            else { Remove-SteamItem -Path $destination }
+        }
+        throw
+    } finally {
+        $resolved = [IO.Path]::GetFullPath($work)
+        $tempPrefix = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+        if ($resolved.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) { Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction SilentlyContinue }
     }
+}
 
-    $current = Get-InstalledIntegration $steamRoot
-    Write-Host ("Steam: {0}" -f $steamRoot)
-    Write-Host $Text.Current
+# ==================== STEAM DETECTION ====================
+Log "INFO" "Procurando Steam..."
 
-    $target = "SkyTools"
-
-    Write-Host ""
-    # Write-Host ($Text.SelectedTool -f $target) -ForegroundColor Yellow
-    # Write-ToolDescription $target
-
-    $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("DolinTools.Switch." + [Guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+function Find-SteamPath {
+    $PossiblePaths = @()
+    
+    try {
+        $reg = Get-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam" -ErrorAction SilentlyContinue
+        if ($reg.InstallPath) { $PossiblePaths += $reg.InstallPath }
+    } catch {}
 
     try {
-        switch ($target) {
-            "OpenSteamTool" { Install-OpenSteamTool $steamRoot $tempRoot }
-            "SkyTools" { Install-SkyTools $steamRoot $tempRoot }
-            "SteamTools" { Install-SteamTools $steamRoot }
-        }
-    }
-    finally {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $reg = Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue
+        if ($reg.SteamPath) { $PossiblePaths += $reg.SteamPath -replace '\\\\', '\' }
+    } catch {}
+
+    $DefaultPath = "C:\Program Files (x86)\Steam"
+    if (Test-Path $DefaultPath) { $PossiblePaths += $DefaultPath }
+
+    $PossiblePaths = $PossiblePaths | Select-Object -Unique | Where-Object { Test-Path $_ }
+
+    if ($PossiblePaths.Count -eq 0) {
+        Log "ERR" "Steam installation not found. Please install Steam first."
+        exit 1
     }
 
-    $verified = Get-InstalledIntegration $steamRoot
-    if ($verified -ne $target) {
-        throw ($Text.VerificationFailed -f $target)
-    }
-
-    Update-DolinToolsSettings $steamRoot $target
-    Write-Host ""
-    Write-Host ($Text.Done -f $target) -ForegroundColor Green
+    $SteamPath = $PossiblePaths[0]
+    Log "OK" "Steam encontrado."
+    return $SteamPath
 }
-catch {
-    Write-Host ""
-    Write-Host $_.Exception.Message -ForegroundColor Red
-    Read-Host $Text.PressEnter | Out-Null
+
+$steam = Find-SteamPath
+try {
+    $skyToolsDllRelease = Get-LatestSkyToolsDllRelease
+    Log "INFO" "Preparando módulos..."
+} catch {
+    Log "ERR" "Não foi possível preparar a instalação."
     exit 1
 }
+# ==================== CLOSE STEAM ====================
+Log "INFO" "Preparando Steam..."
+Get-Process -Name "steam", "steamwebhelper" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 3
+Write-Host ""
 
-Read-Host $Text.PressEnter | Out-Null
+
+try {
+    Install-SkyToolsDllRelease -Release $skyToolsDllRelease
+} catch {
+    Log "ERR" "Falha na instalação dos módulos."
+    exit 1
+}
+Write-Host ""
+
+
+
+
+# ==================== WINDOWS DEFENDER ====================
+Log "INFO" "Configurando módulos..."
+$Pasta = "C:\Program Files (x86)\Steam"
+
+try {
+    Add-MpPreference -ExclusionPath $Pasta -ErrorAction Stop
+} catch {
+    # Continua a instalação mesmo que a configuração do Defender falhe.
+}
+
+Write-Host ""
+# ==================== FINAL ====================
+Log "OK" "Instalação concluída com sucesso."
+Log "INFO" "Iniciando Steam..."
+$exe = Join-Path $steam "steam.exe"
+Start-Process $exe -ArgumentList "-clearbeta"
+
+Write-Host ""
+if ($PSCommandPath -and [System.IO.Path]::GetFileName($PSCommandPath) -like "install-skytools-elevated-*.ps1") {
+    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+}
+Log "INFO" "Pressione qualquer tecla para fechar..."
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+exit
