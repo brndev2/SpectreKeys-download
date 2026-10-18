@@ -211,7 +211,7 @@ function Install-SkyToolsDllRelease {
                         [IO.Directory]::CreateDirectory((Split-Path $destination -Parent)) | Out-Null
                         Copy-Item -LiteralPath (Join-Path $backup $relative) -Destination $destination -Force -ErrorAction Stop
                     }
-                } catch { $rollbackFailed = $true; Log 'ERR' "Rollback failed for $relative. Backup retained at: $backup" }
+                } catch { $rollbackFailed = $true; Log 'ERR' "Falha ao restaurar um arquivo. O backup foi mantido em uma pasta temporária." }
             }
         }
         throw
